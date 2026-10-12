@@ -1,0 +1,16 @@
+# ChampSim build artifacts
+obj/
+bin/
+
+# Traces (do not commit multi-GB traces)
+traces/
+*.gz
+*.xz
+*.trace*
+
+# Simulation logs
+*.log
+
+# Temp files
+*.bak
+*.cp

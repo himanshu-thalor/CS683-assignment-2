@@ -1,7 +1,7 @@
 #include "cache.h"
 
 #define maxRRPV 3
-#define LEADERS 32
+#define LEADERS 16
 #define THRESHOLD 0.25
 
 

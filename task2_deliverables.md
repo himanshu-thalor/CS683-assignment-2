@@ -21,12 +21,12 @@ Report of IPC, Speedup, L2C Load MPKI, L2 Instruction Load MPKI, and L2 Data Loa
 
 $$\text{Speedup} = \frac{\text{IPC}_{\text{I-RRIP}}}{\text{IPC}_{\text{LRU}}}$$
 
-*Generated Plots for Task 2A (matching PDF Pages 6 & 7 theme in `plots/`):*
-- `plots/task2a_ipc.png`: Instructions Per Cycle (IPC) for Baseline (LRU) vs. I-RRIP across Traces 1, 2, 3
-- `plots/task2a_speedup.png`: Speedup over Baseline (LRU) for I-RRIP across Traces 1, 2, 3
-- `plots/task2a_instruction_mpki.png`: L2 Instruction Load MPKI for Baseline (LRU) vs. I-RRIP across Traces 1, 2, 3
-- `plots/task2a_data_mpki.png`: L2 Data Load MPKI for Baseline (LRU) vs. I-RRIP across Traces 1, 2, 3
-- `plots/task2a_total_mpki.png`: Total L2C Load MPKI for Baseline (LRU) vs. I-RRIP across Traces 1, 2, 3
+*Generated Plots for Task 2A (matching PDF Pages 6 & 7 theme in `plots/task2a/`):*
+- `plots/task2a/task2a_ipc.png`: Instructions Per Cycle (IPC) for Baseline (LRU) vs. I-RRIP across Traces 1, 2, 3
+- `plots/task2a/task2a_speedup.png`: Speedup over Baseline (LRU) for I-RRIP across Traces 1, 2, 3
+- `plots/task2a/task2a_instruction_mpki.png`: L2 Instruction Load MPKI for Baseline (LRU) vs. I-RRIP across Traces 1, 2, 3
+- `plots/task2a/task2a_data_mpki.png`: L2 Data Load MPKI for Baseline (LRU) vs. I-RRIP across Traces 1, 2, 3
+- `plots/task2a/task2a_total_mpki.png`: Total L2C Load MPKI for Baseline (LRU) vs. I-RRIP across Traces 1, 2, 3
 
 ---
 
@@ -77,8 +77,8 @@ If $\text{Ratio} > \text{THRESHOLD}$, follower sets use I-RRIP; otherwise, they 
 | **0.35** | Trace 2 | 0.2576 | +3.04% | 21.654 | 10.970 | 10.684 | Partial / Under-engages |
 | **0.35** | Trace 3 | 0.3814 | -0.13% | 4.011 | 0.969 | 3.042 | RRIP |
 
-*Generated Plot for Threshold Parameter Tuning (matching PDF Pages 6 & 7 theme in `plots/`):*
-- `plots/task2b_threshold_speedup.png`: Speedup over Baseline (LRU) vs. Decision Threshold across Traces 1, 2, 3
+*Generated Plot for Threshold Parameter Tuning (matching PDF Pages 6 & 7 theme in `plots/task2b/`):*
+- `plots/task2b/task2b_threshold_speedup.png`: Speedup over Baseline (LRU) vs. Decision Threshold across Traces 1, 2, 3
 
 ---
 
@@ -98,15 +98,15 @@ Comparison of 16, 32, and 64 dedicated leader sets across the 1024 L2 cache sets
 | **64 Leader Sets (Default - Highest Values)** | Trace 2 | **0.2588** | **+3.52%** | 21.111 | **10.115** | 10.996 |
 | **64 Leader Sets (Default - Highest Values)** | Trace 3 | 0.3826 | +0.17% | 3.934 | 0.790 | 3.143 |
 
-*Generated Plot for Leader Set Sensitivity (in `plots/`):*
-- `plots/task2b_leaders_sensitivity.png`: Speedup across 16, 32, and 64 leader sets (All Traces: Trace 1, 2, 3)
+*Generated Plot for Leader Set Sensitivity (in `plots/task2b/`):*
+- `plots/task2b/task2b_leaders_sensitivity.png`: Speedup across 16, 32, and 64 leader sets (All Traces: Trace 1, 2, 3)
 
-*Generated Plots for Tuned Dynamic I-RRIP vs. Baseline LRU (matching PDF Pages 6 & 7 theme in `plots/`):*
-- `plots/task2b_ipc.png`: Instructions Per Cycle (IPC) for Baseline (LRU) vs. Dynamic I-RRIP (Tuned) across Traces 1, 2, 3
-- `plots/task2b_speedup.png`: Speedup over Baseline (LRU) for Dynamic I-RRIP (Tuned) across Traces 1, 2, 3
-- `plots/task2b_instruction_mpki.png`: L2 Instruction Load MPKI for Baseline (LRU) vs. Dynamic I-RRIP (Tuned) across Traces 1, 2, 3
-- `plots/task2b_data_mpki.png`: L2 Data Load MPKI for Baseline (LRU) vs. Dynamic I-RRIP (Tuned) across Traces 1, 2, 3
-- `plots/task2b_total_mpki.png`: Total L2C Load MPKI for Baseline (LRU) vs. Dynamic I-RRIP (Tuned) across Traces 1, 2, 3
+*Generated Plots for Tuned Dynamic I-RRIP vs. Baseline LRU (matching PDF Pages 6 & 7 theme in `plots/task2b/`):*
+- `plots/task2b/task2b_ipc.png`: Instructions Per Cycle (IPC) for Baseline (LRU) vs. Dynamic I-RRIP (Tuned) across Traces 1, 2, 3
+- `plots/task2b/task2b_speedup.png`: Speedup over Baseline (LRU) for Dynamic I-RRIP (Tuned) across Traces 1, 2, 3
+- `plots/task2b/task2b_instruction_mpki.png`: L2 Instruction Load MPKI for Baseline (LRU) vs. Dynamic I-RRIP (Tuned) across Traces 1, 2, 3
+- `plots/task2b/task2b_data_mpki.png`: L2 Data Load MPKI for Baseline (LRU) vs. Dynamic I-RRIP (Tuned) across Traces 1, 2, 3
+- `plots/task2b/task2b_total_mpki.png`: Total L2C Load MPKI for Baseline (LRU) vs. Dynamic I-RRIP (Tuned) across Traces 1, 2, 3
 
 ---
 

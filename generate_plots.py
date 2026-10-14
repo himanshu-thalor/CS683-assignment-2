@@ -12,20 +12,23 @@ plt.rcParams['axes.grid'] = False
 plt.rcParams['figure.facecolor'] = 'white'
 plt.rcParams['axes.facecolor'] = 'white'
 
-os.makedirs('plots', exist_ok=True)
+os.makedirs('plots/task2a', exist_ok=True)
+os.makedirs('plots/task2b', exist_ok=True)
+os.makedirs('plots/task3', exist_ok=True)
 
 # Common definitions
 traces = ['Trace 1', 'Trace 2', 'Trace 3']
 x_traces = np.arange(len(traces))
 width2 = 0.32
 width3 = 0.24
+width_single = 0.45
 
 # PDF Color Palette
-c_coral = '#eb7d75'   # Trace 1 / Baseline
-c_sky = '#7fc2df'     # Trace 2 / Intermediate
-c_green = '#98d89e'   # Trace 3 / Tuned Policy
+c_coral = '#eb7d75'   # Baseline
+c_sky = '#7fc2df'     # Intermediate / Metric
+c_green = '#98d89e'   # Optimized Policy
 c_slate = '#6a82bc'
-c_crimson = '#c95374'
+c_crimson = '#c95374' # 1.0 dashed line
 
 # Baseline LRU Data across Traces 1, 2, 3
 lru_ipc = [0.2321, 0.2500, 0.3819]
@@ -34,7 +37,7 @@ lru_dmpki = [7.359, 8.706, 2.835]
 lru_totmpki = [17.725, 28.550, 3.961]
 
 # ==============================================================================
-# TASK 2A PLOTS: Baseline (LRU) vs. I-RRIP across all 3 Traces
+# TASK 2A PLOTS (Saved to plots/task2a/)
 # ==============================================================================
 
 irrip_ipc = [0.2316, 0.2589, 0.3825]
@@ -55,7 +58,7 @@ ax.set_xticklabels(traces)
 ax.set_ylim(0, 0.45)
 ax.legend(loc='upper left', frameon=True, edgecolor='black', fontsize=9, framealpha=1.0)
 plt.tight_layout()
-plt.savefig('plots/task2a_ipc.png')
+plt.savefig('plots/task2a/task2a_ipc.png')
 plt.close()
 
 # --- Plot 2A-2: Speedup ---
@@ -74,7 +77,7 @@ for i, v in enumerate(irrip_spd):
     ax.text(i, v + 0.002, f'{sign}{diff:.2f}%', ha='center', va='bottom', fontsize=9, fontweight='bold')
 ax.legend(loc='upper right', frameon=True, edgecolor='black', fontsize=9, framealpha=1.0)
 plt.tight_layout()
-plt.savefig('plots/task2a_speedup.png')
+plt.savefig('plots/task2a/task2a_speedup.png')
 plt.close()
 
 # --- Plot 2A-3: L2 Instruction Load MPKI ---
@@ -89,7 +92,7 @@ ax.set_xticklabels(traces)
 ax.set_ylim(0, 22)
 ax.legend(loc='upper right', frameon=True, edgecolor='black', fontsize=9, framealpha=1.0)
 plt.tight_layout()
-plt.savefig('plots/task2a_instruction_mpki.png')
+plt.savefig('plots/task2a/task2a_instruction_mpki.png')
 plt.close()
 
 # --- Plot 2A-4: L2 Data Load MPKI ---
@@ -104,7 +107,7 @@ ax.set_xticklabels(traces)
 ax.set_ylim(0, 14)
 ax.legend(loc='upper right', frameon=True, edgecolor='black', fontsize=9, framealpha=1.0)
 plt.tight_layout()
-plt.savefig('plots/task2a_data_mpki.png')
+plt.savefig('plots/task2a/task2a_data_mpki.png')
 plt.close()
 
 # --- Plot 2A-5: Total L2C Load MPKI ---
@@ -119,11 +122,11 @@ ax.set_xticklabels(traces)
 ax.set_ylim(0, 32)
 ax.legend(loc='upper right', frameon=True, edgecolor='black', fontsize=9, framealpha=1.0)
 plt.tight_layout()
-plt.savefig('plots/task2a_total_mpki.png')
+plt.savefig('plots/task2a/task2a_total_mpki.png')
 plt.close()
 
 # ==============================================================================
-# TASK 2B PARAMETER TUNING: 1 Graph for Threshold Tuning + 1 for Leader Sets
+# TASK 2B PLOTS (Saved to plots/task2b/)
 # ==============================================================================
 
 thresholds = ['0.15', '0.20', '0.25\n(Default)', '0.30', '0.35']
@@ -147,7 +150,7 @@ ax.set_xticklabels(thresholds)
 ax.set_ylim(0.97, 1.055)
 ax.legend(loc='upper right', frameon=True, edgecolor='black', fontsize=9, framealpha=1.0)
 plt.tight_layout()
-plt.savefig('plots/task2b_threshold_speedup.png')
+plt.savefig('plots/task2b/task2b_threshold_speedup.png')
 plt.close()
 
 # --- Leader Sets Tuning Plot: Speedup across Leader Set Allocations (All Traces) ---
@@ -171,14 +174,10 @@ ax.set_xticklabels(leader_configs)
 ax.set_ylim(0.97, 1.055)
 ax.legend(loc='upper right', frameon=True, edgecolor='black', fontsize=9, framealpha=1.0)
 plt.tight_layout()
-plt.savefig('plots/task2b_leaders_sensitivity.png')
+plt.savefig('plots/task2b/task2b_leaders_sensitivity.png')
 plt.close()
 
-# ==============================================================================
-# TASK 2B TUNED PARAMS VS. LRU PLOTS: Dynamic I-RRIP (Tuned) vs. Baseline (LRU)
-# ==============================================================================
-
-# Tuned Dynamic I-RRIP (64 Leader Sets, Threshold 0.25)
+# --- Tuned Dynamic I-RRIP vs. Baseline (LRU) ---
 dyn_ipc = [0.2316, 0.2588, 0.3826]
 dyn_spd = [0.9978, 1.0352, 1.0017]
 dyn_impki = [9.193, 10.115, 0.790]
@@ -197,7 +196,7 @@ ax.set_xticklabels(traces)
 ax.set_ylim(0, 0.45)
 ax.legend(loc='upper left', frameon=True, edgecolor='black', fontsize=9, framealpha=1.0)
 plt.tight_layout()
-plt.savefig('plots/task2b_ipc.png')
+plt.savefig('plots/task2b/task2b_ipc.png')
 plt.close()
 
 # --- Plot 2B Tuned vs LRU 2: Speedup ---
@@ -216,7 +215,7 @@ for i, v in enumerate(dyn_spd):
     ax.text(i, v + 0.002, f'{sign}{diff:.2f}%', ha='center', va='bottom', fontsize=9, fontweight='bold')
 ax.legend(loc='upper right', frameon=True, edgecolor='black', fontsize=9, framealpha=1.0)
 plt.tight_layout()
-plt.savefig('plots/task2b_speedup.png')
+plt.savefig('plots/task2b/task2b_speedup.png')
 plt.close()
 
 # --- Plot 2B Tuned vs LRU 3: L2 Instruction Load MPKI ---
@@ -231,7 +230,7 @@ ax.set_xticklabels(traces)
 ax.set_ylim(0, 22)
 ax.legend(loc='upper right', frameon=True, edgecolor='black', fontsize=9, framealpha=1.0)
 plt.tight_layout()
-plt.savefig('plots/task2b_instruction_mpki.png')
+plt.savefig('plots/task2b/task2b_instruction_mpki.png')
 plt.close()
 
 # --- Plot 2B Tuned vs LRU 4: L2 Data Load MPKI ---
@@ -246,7 +245,7 @@ ax.set_xticklabels(traces)
 ax.set_ylim(0, 14)
 ax.legend(loc='upper right', frameon=True, edgecolor='black', fontsize=9, framealpha=1.0)
 plt.tight_layout()
-plt.savefig('plots/task2b_data_mpki.png')
+plt.savefig('plots/task2b/task2b_data_mpki.png')
 plt.close()
 
 # --- Plot 2B Tuned vs LRU 5: Total L2C Load MPKI ---
@@ -261,7 +260,154 @@ ax.set_xticklabels(traces)
 ax.set_ylim(0, 32)
 ax.legend(loc='upper right', frameon=True, edgecolor='black', fontsize=9, framealpha=1.0)
 plt.tight_layout()
-plt.savefig('plots/task2b_total_mpki.png')
+plt.savefig('plots/task2b/task2b_total_mpki.png')
 plt.close()
 
-print('Successfully generated all Task 2A and 2B plots (1 graph for parameter tuning, full suite for tuned vs LRU)!')
+# ==============================================================================
+# TASK 3 PLOTS (Saved to plots/task3/)
+# ==============================================================================
+
+t3_ipc = [0.2337, 0.2629, 0.3949]
+t3_spd = [1.0069, 1.0517, 1.0342]
+t3_acc = [42.84, 37.38, 37.00]
+t3_cov = [13.46, 4.60, 26.19]
+
+lru_l1d = [10.679, 13.537, 3.404]
+t3_l1d = [9.242, 12.915, 2.512]
+
+lru_l2_t3 = [17.725, 28.550, 3.961]
+t3_l2c = [17.221, 20.684, 2.862]
+
+lru_l2_inst_t3 = [10.367, 19.844, 1.127]
+t3_l2_inst = [9.271, 10.508, 0.816]
+
+lru_l2_data_t3 = [7.359, 8.706, 2.835]
+t3_l2_data = [7.950, 10.176, 2.046]
+
+# --- Task 3 Plot 1: IPC ---
+fig, ax = plt.subplots(figsize=(6.5, 4.8), dpi=300)
+ax.bar(x_traces - width2/2, lru_ipc, width2, label='Baseline (LRU)', color=c_coral, edgecolor='black', linewidth=0.8)
+ax.bar(x_traces + width2/2, t3_ipc, width2, label='Task 3 (SPP + Dyn I-RRIP)', color=c_green, edgecolor='black', linewidth=0.8)
+ax.set_title('Task 3: Instructions Per Cycle (IPC)', fontsize=11, pad=10)
+ax.set_ylabel('IPC', fontsize=10)
+ax.set_xlabel('Benchmark Traces', fontsize=10)
+ax.set_xticks(x_traces)
+ax.set_xticklabels(traces)
+ax.set_ylim(0, 0.48)
+ax.legend(loc='upper left', frameon=True, edgecolor='black', fontsize=9, framealpha=1.0)
+plt.tight_layout()
+plt.savefig('plots/task3/task3_ipc.png')
+plt.close()
+
+# --- Task 3 Plot 2: Speedup (PDF Page 6 Top Style) ---
+fig, ax = plt.subplots(figsize=(6.5, 4.8), dpi=300)
+ax.bar(x_traces, t3_spd, width_single, label='Task 3 Speedup', color=c_sky, edgecolor='black', linewidth=0.8)
+ax.axhline(1.0, color=c_crimson, linestyle='--', linewidth=1.2, label='Baseline (LRU = 1.0)')
+ax.set_title('Task 3: Speedup over Baseline', fontsize=11, pad=10)
+ax.set_ylabel('Speedup (Normalized to LRU)', fontsize=10)
+ax.set_xlabel('Benchmark Traces', fontsize=10)
+ax.set_xticks(x_traces)
+ax.set_xticklabels(traces)
+ax.set_ylim(0.97, 1.075)
+for i, v in enumerate(t3_spd):
+    diff = (v - 1.0) * 100
+    sign = '+' if diff >= 0 else ''
+    ax.text(i, v + 0.002, f'{sign}{diff:.2f}%', ha='center', va='bottom', fontsize=9, fontweight='bold')
+ax.legend(loc='upper right', frameon=True, edgecolor='black', fontsize=9, framealpha=1.0)
+plt.tight_layout()
+plt.savefig('plots/task3/task3_speedup.png')
+plt.close()
+
+# --- Task 3 Plot 3: Prefetch Accuracy (PDF Page 7 Top Style) ---
+fig, ax = plt.subplots(figsize=(6.5, 4.8), dpi=300)
+ax.bar(x_traces, t3_acc, width_single, label='SPP Prefetch Accuracy', color=c_slate, edgecolor='black', linewidth=0.8)
+ax.set_title('Task 3: L1D Prefetch Accuracy', fontsize=11, pad=10)
+ax.set_ylabel('Accuracy (%)', fontsize=10)
+ax.set_xlabel('Benchmark Traces', fontsize=10)
+ax.set_xticks(x_traces)
+ax.set_xticklabels(traces)
+ax.set_ylim(0, 55)
+for i, v in enumerate(t3_acc):
+    ax.text(i, v + 1.0, f'{v:.2f}%', ha='center', va='bottom', fontsize=9, fontweight='bold')
+ax.legend(loc='upper right', frameon=True, edgecolor='black', fontsize=9, framealpha=1.0)
+plt.tight_layout()
+plt.savefig('plots/task3/task3_accuracy.png')
+plt.close()
+
+# --- Task 3 Plot 4: L1D Coverage (PDF Page 7 Bottom Style) ---
+fig, ax = plt.subplots(figsize=(6.5, 4.8), dpi=300)
+ax.bar(x_traces, t3_cov, width_single, label='L1D Prefetch Coverage', color=c_green, edgecolor='black', linewidth=0.8)
+ax.set_title('Task 3: L1D Cache Miss Coverage', fontsize=11, pad=10)
+ax.set_ylabel('Coverage (%)', fontsize=10)
+ax.set_xlabel('Benchmark Traces', fontsize=10)
+ax.set_xticks(x_traces)
+ax.set_xticklabels(traces)
+ax.set_ylim(0, 32)
+for i, v in enumerate(t3_cov):
+    ax.text(i, v + 0.6, f'{v:.2f}%', ha='center', va='bottom', fontsize=9, fontweight='bold')
+ax.legend(loc='upper right', frameon=True, edgecolor='black', fontsize=9, framealpha=1.0)
+plt.tight_layout()
+plt.savefig('plots/task3/task3_coverage.png')
+plt.close()
+
+# --- Task 3 Plot 5: L1D Load MPKI ---
+fig, ax = plt.subplots(figsize=(6.5, 4.8), dpi=300)
+ax.bar(x_traces - width2/2, lru_l1d, width2, label='Baseline (LRU)', color=c_coral, edgecolor='black', linewidth=0.8)
+ax.bar(x_traces + width2/2, t3_l1d, width2, label='Task 3 (SPP + Dyn I-RRIP)', color=c_green, edgecolor='black', linewidth=0.8)
+ax.set_title('Task 3: L1D Load MPKI Reduction', fontsize=11, pad=10)
+ax.set_ylabel('L1D Load MPKI', fontsize=10)
+ax.set_xlabel('Benchmark Traces', fontsize=10)
+ax.set_xticks(x_traces)
+ax.set_xticklabels(traces)
+ax.set_ylim(0, 16)
+ax.legend(loc='upper right', frameon=True, edgecolor='black', fontsize=9, framealpha=1.0)
+plt.tight_layout()
+plt.savefig('plots/task3/task3_l1d_mpki.png')
+plt.close()
+
+# --- Task 3 Plot 6: L2C Total Load MPKI ---
+fig, ax = plt.subplots(figsize=(6.5, 4.8), dpi=300)
+ax.bar(x_traces - width2/2, lru_l2_t3, width2, label='Baseline (LRU)', color=c_coral, edgecolor='black', linewidth=0.8)
+ax.bar(x_traces + width2/2, t3_l2c, width2, label='Task 3 (SPP + Dyn I-RRIP)', color=c_green, edgecolor='black', linewidth=0.8)
+ax.set_title('Task 3: Total L2C Load MPKI Reduction', fontsize=11, pad=10)
+ax.set_ylabel('L2C Total MPKI', fontsize=10)
+ax.set_xlabel('Benchmark Traces', fontsize=10)
+ax.set_xticks(x_traces)
+ax.set_xticklabels(traces)
+ax.set_ylim(0, 32)
+ax.legend(loc='upper right', frameon=True, edgecolor='black', fontsize=9, framealpha=1.0)
+plt.tight_layout()
+plt.savefig('plots/task3/task3_l2c_total_mpki.png')
+plt.close()
+
+# --- Task 3 Plot 7: L2 Instruction Load MPKI ---
+fig, ax = plt.subplots(figsize=(6.5, 4.8), dpi=300)
+ax.bar(x_traces - width2/2, lru_l2_inst_t3, width2, label='Baseline (LRU)', color=c_coral, edgecolor='black', linewidth=0.8)
+ax.bar(x_traces + width2/2, t3_l2_inst, width2, label='Task 3 (SPP + Dyn I-RRIP)', color=c_green, edgecolor='black', linewidth=0.8)
+ax.set_title('Task 3: L2 Instruction Load MPKI Reduction', fontsize=11, pad=10)
+ax.set_ylabel('L2 Instruction MPKI', fontsize=10)
+ax.set_xlabel('Benchmark Traces', fontsize=10)
+ax.set_xticks(x_traces)
+ax.set_xticklabels(traces)
+ax.set_ylim(0, 22)
+ax.legend(loc='upper right', frameon=True, edgecolor='black', fontsize=9, framealpha=1.0)
+plt.tight_layout()
+plt.savefig('plots/task3/task3_l2c_instruction_mpki.png')
+plt.close()
+
+# --- Task 3 Plot 8: L2 Data Load MPKI ---
+fig, ax = plt.subplots(figsize=(6.5, 4.8), dpi=300)
+ax.bar(x_traces - width2/2, lru_l2_data_t3, width2, label='Baseline (LRU)', color=c_coral, edgecolor='black', linewidth=0.8)
+ax.bar(x_traces + width2/2, t3_l2_data, width2, label='Task 3 (SPP + Dyn I-RRIP)', color=c_sky, edgecolor='black', linewidth=0.8)
+ax.set_title('Task 3: L2 Data Load MPKI', fontsize=11, pad=10)
+ax.set_ylabel('L2 Data MPKI', fontsize=10)
+ax.set_xlabel('Benchmark Traces', fontsize=10)
+ax.set_xticks(x_traces)
+ax.set_xticklabels(traces)
+ax.set_ylim(0, 14)
+ax.legend(loc='upper right', frameon=True, edgecolor='black', fontsize=9, framealpha=1.0)
+plt.tight_layout()
+plt.savefig('plots/task3/task3_l2c_data_mpki.png')
+plt.close()
+
+print('Successfully generated all Task 2A, Task 2B, and Task 3 plots in their respective subfolders!')

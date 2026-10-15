@@ -1,7 +1,7 @@
 #include "cache.h"
 
 #define maxRRPV 3
-#define LEADERS 16
+#define LEADERS 64
 #define THRESHOLD 0.25
 
 
@@ -15,7 +15,7 @@ bool use_irrip = false;
 
 static inline bool is_leader(uint32_t set)
 {
-    return (set % LEADERS) == 0;
+    return (set % (L2C_SET / LEADERS)) == 0;
 }
 
 

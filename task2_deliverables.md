@@ -113,7 +113,7 @@ Comparison of 16, 32, and 64 dedicated leader sets across the 1024 L2 cache sets
 ## 3. Rationale Behind Number of Leader Sets and Decision Logic
 
 ### Rationale Behind Leader Sets (64 Sets Selected as Default)
-- **Evaluation:** Allocating 64 leader sets (stride 16, `#define LEADERS 16`, i.e., `set % 16 == 0`) samples 6.25% of the 1024 cache sets.
+- **Evaluation:** Allocating 64 leader sets (`#define LEADERS 64`, sampling stride `L2C_SET / LEADERS = 16`, i.e., `set % (L2C_SET / LEADERS) == 0`) samples 6.25% of the 1024 cache sets.
 - **Why it is Default:** 64 leader sets achieves the **highest observed Trace 2 speedup (+3.52%)** and the **lowest instruction MPKI (10.115)** among all dynamic configurations. Sampling every 16th set captures instruction burst patterns more rapidly than sparser allocations (16 sets: +3.34%, 32 sets: +3.46%), allowing follower sets to adapt immediately to server instruction loops while maintaining full stability.
 
 ### Rationale Behind Decision Logic & Threshold Choice

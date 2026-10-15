@@ -1,296 +1,210 @@
 #include "cache.h"
 #include <iostream>
-#include <iomanip>
-#include <cstdlib>
 
-// ==============================================================================
-// CS683: Advanced Computer Architecture — Programming Assignment II
-// Task 1B: Stride Pattern Prefetcher (SPP) at L1D Cache
+// CS683 PA2 - Task 1B: Stride Pattern Prefetcher (SPP) at L1D
 //
-// Dual Pattern Classification Architecture (Hybrid Enhanced):
-// 1. Uniform Strides (Constant Stride):
-//    - 2-bit saturating counter (u_conf: 0..3) with punitive reset on mismatch.
-//    - Cross-page stride inheritance: preserves confident stride across 4KB pages.
-//    - Farthest-line tracking (pf_off): eliminates redundant intra-page prefetches.
-//    - Lookahead prefetches: cl + stride * d, strictly clamped within 4KB page.
+// We track every load IP in a 4-way IP table. If the IP keeps repeating the
+// same stride (u_conf >= 1) we prefetch with that stride(uniform mode) , else we go
+// back to a pattern table (PHT)(non-uniform mode), having indexing as a signature of the IP's recent
+// strides, which tells about the next stride. Prefetches stay inside the 4KB page, a
+// small FIFO filter filters repeated requests, and the degree (1/2/4/6/8)
+// is decided by the prefetch accuracy of the last 128 useful + useless prefetches.
 //
-// 2. Non-Uniform Strides (Repeating Multi-Stride Sequences):
-//    - Instant fallback when uniform continuity breaks (u_conf == 0).
-//    - Maintains a rolling 10-bit signature S representing recent stride history.
-//    - Pattern History Table (PHT) with 1024 entries, indexed by signature.
-//    - Multi-degree Markov graph lookahead traversal.
-//
-// 3. Queue, Memory & Safety Constraints:
-//    - Strict 4KB OS page boundary enforcement: no cross-page prefetches.
-//    - 32-entry circular FIFO filter: eliminates duplicate requests across IPs.
-//    - 4-way set associative IP table (256 sets x 4 ways = 1024 entries) with LRU.
-//    - Dynamic accuracy throttling: scales degree (1, 2, 4, 6, 8) based on utility.
-//    - Hardware storage budget: 14.504 KB (strictly <= 16.0 KB).
-// ==============================================================================
+// Storage (also mentioned in the report):
+//   IP entry : tag 16 + valid 1 + last_cl 58 + last_stride 8 + u_conf 2
+//              + sig 10 + lru 2 + pf_off 6 + pf_valid 1 = 104 bits
+//              x 1024 entries = 106,496 bits
+//   PHT entry: stride 8 + conf 2 = 10 bits x 1024 entries = 10,240 bits
+//   Filter   : 32 x 64-bit line address = 2,048 bits
+//   Throttler: useful snapshot 16 + useless snapshot 16 + degree level 3 = 35 bits
+//   TOTAL    : 118,819 bits = 14.504 KB
+//   Not counted: the 5-bit filter head pointer 
+//   and the per-line "prefetched" bit the L1D already keeps.
 
-#define IP_SET_COUNT 256
-#define IP_WAY_COUNT 4
-#define PHT_SIZE 1024
-#define PHT_MASK (PHT_SIZE - 1)
+#define IP_SETS     256
+#define IP_WAYS     4
+#define PHT_SIZE    1024
 #define FILTER_SIZE 32
-#define MAX_DEGREE 8
 
-// IP Tracker Entry (1024 total entries: 256 sets x 4 ways)
-// Exact bit-level breakdown:
-// - tag: 16 bits
-// - valid: 1 bit
-// - last_cl: 58 bits (physical cache line address)
-// - last_stride: 8 bits (signed int8_t, range -128 to +127)
-// - u_conf: 2 bits (saturating counter, 0..3)
-// - sig: 10 bits (rolling non-uniform stride history signature)
-// - lru: 2 bits (4-way pseudo-LRU)
-// - pf_off: 6 bits (farthest line offset prefetched within page, 0..63)
-// - pf_valid: 1 bit (validity of pf_off for current page)
-// Total per entry = 104 bits. Table overhead = 1024 * 104 bits = 106,496 bits = 13.000 KB
 struct IP_ENTRY {
     uint16_t tag;
     uint8_t  valid;
-    uint64_t last_cl;
+    uint64_t last_cl;       // last cache line this IP touch
     int8_t   last_stride;
-    uint8_t  u_conf;
-    uint16_t sig;
-    uint8_t  lru;
-    uint8_t  pf_off;
-    uint8_t  pf_valid;
+    uint8_t  u_conf;        // 0..3, confidence in last_stride
+    uint16_t sig;           // history of the last few strides
+    uint8_t  lru;           // 0 = most recently used
+    uint8_t  pf_off;        // farthest line already prefetched in this page
+    uint8_t  pf_valid;      // checking if pf_off valid for the current page
 };
 
-// Pattern History Table (PHT) Entry (1024 total entries)
-// Exact bit-level breakdown:
-// - stride: 8 bits (signed int8_t, range -128 to +127)
-// - conf: 2 bits (saturating confidence counter, 0..3)
-// Total per entry = 10 bits. Table overhead = 1024 * 10 bits = 10,240 bits = 1.250 KB
-struct PHT_ENTRY {
+struct PHT_ENTRY {          
     int8_t  stride;
-    uint8_t conf;
+    uint8_t conf;          
 };
 
-// Hardware State Structures
-static IP_ENTRY ip_table[IP_SET_COUNT][IP_WAY_COUNT];
+static IP_ENTRY  ip_table[IP_SETS][IP_WAYS];
 static PHT_ENTRY pht[PHT_SIZE];
-static uint64_t filter[FILTER_SIZE];
-static int filter_head = 0;
+static uint64_t  filter[FILTER_SIZE];   // recently prefetched lines 
+static int       filter_head = 0;
 
-// Dynamic Degree & Statistics State
-static uint32_t current_degree = 4;
-static uint64_t last_useful = 0;
-static uint64_t last_useless = 0;
-static uint64_t total_uniform_pf = 0;
-static uint64_t total_pattern_pf = 0;
+static int degree = 4;
+static uint64_t last_useful = 0, last_useless = 0;  // cache counters at the last degree update
 
-// 1. IP Hash Function: Folds 64-bit IP across multiple bit fields
-static inline uint32_t hash_ip(uint64_t ip) {
-    uint64_t h = ip ^ (ip >> 5) ^ (ip >> 11) ^ (ip >> 17);
-    return (uint32_t)(h & (IP_SET_COUNT - 1));
+// updating the signature by shifting the old history by 2 bits and mixing the new stride (sign + 6-bit magnitude)
+static int update_sig(int sig, int stride) {
+    int size = stride;
+    if (stride < 0) size = -stride;
+
+    int token = size & 0x3F;
+    if (stride < 0) token = token | 0x40;
+
+    return ((sig << 2) ^ token) & (PHT_SIZE - 1);
 }
 
-// 2. IP Tag Generation
-static inline uint16_t hash_tag(uint64_t ip) {
-    return (uint16_t)((ip >> 8) & 0xFFFF);
-}
-
-// 3. Signature Update: 7-bit sign-magnitude encoding with 2-bit positional shift
-static inline uint16_t update_sig(uint16_t old_sig, int8_t delta) {
-    uint16_t s_delta = (delta < 0) ? (uint16_t)(((-delta) & 0x3F) | 0x40) : (uint16_t)(delta & 0x3F);
-    return ((old_sig << 2) ^ s_delta) & PHT_MASK;
+// Making one way the most recently used in its set
+static void make_mru(int set, int way) {
+    for (int w = 0; w < IP_WAYS; w++)
+        if (ip_table[set][w].lru < ip_table[set][way].lru) 
+            ip_table[set][w].lru++;
+    ip_table[set][way].lru = 0;
 }
 
 void CACHE::l1d_prefetcher_initialize() {
-    std::cout << "CPU " << cpu << " L1D Stride Pattern Prefetcher (SPP) with Dual Pattern Classification [Hybrid Enhanced]" << std::endl;
-    for (int i = 0; i < IP_SET_COUNT; i++) {
-        for (int j = 0; j < IP_WAY_COUNT; j++) {
-            ip_table[i][j].valid = 0;
-            ip_table[i][j].tag = 0;
-            ip_table[i][j].last_cl = 0;
-            ip_table[i][j].last_stride = 0;
-            ip_table[i][j].u_conf = 0;
-            ip_table[i][j].sig = 0;
-            ip_table[i][j].lru = j;
-            ip_table[i][j].pf_off = 0;
-            ip_table[i][j].pf_valid = 0;
-        }
-    }
-    for (int i = 0; i < PHT_SIZE; i++) {
-        pht[i].stride = 0;
-        pht[i].conf = 0;
-    }
-    for (int i = 0; i < FILTER_SIZE; i++) filter[i] = 0;
-    filter_head = 0;
-    current_degree = 4;
-    last_useful = 0;
-    last_useless = 0;
-    total_uniform_pf = 0;
-    total_pattern_pf = 0;
+    std::cout << "CPU " << cpu << " L1D Stride Pattern Prefetcher (SPP)" << std::endl;
+    for (int i = 0; i < IP_SETS; i++)
+        for (int j = 0; j < IP_WAYS; j++)
+            ip_table[i][j].lru = j;     // everything else is static, so already zero
 }
 
 void CACHE::l1d_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache_hit, uint8_t type, uint8_t critical_ip_flag) {
     if (type == PREFETCH || type == WRITEBACK || ip == 0) return;
 
-    // Accuracy-Based Dynamic Degree Throttling
-    uint64_t du = this->pf_useful - last_useful;
-    uint64_t dl = this->pf_useless - last_useless;
-    if (du + dl >= 128) {
-        double acc = (du + dl > 0) ? ((double)du / (du + dl)) : 0.5;
-        if (acc < 0.42) current_degree = 1;
-        else if (acc < 0.50) current_degree = 2;
-        else if (acc < 0.65) current_degree = 4;
-        else if (acc < 0.80) current_degree = 6;
-        else current_degree = MAX_DEGREE;
-        last_useful = this->pf_useful;
-        last_useless = this->pf_useless;
+    // The cache counters restarts after warmup, so correct it before subtracting
+    if (pf_useful < last_useful || pf_useless < last_useless) {
+        last_useful  = pf_useful;
+        last_useless = pf_useless;
     }
 
-    uint64_t cl = addr >> LOG2_BLOCK_SIZE;
-    uint64_t cur_page = addr >> LOG2_PAGE_SIZE;
-    int offset = (int)(cl & 63);
-    uint32_t set = hash_ip(ip);
-    uint16_t tag = hash_tag(ip);
-
-    // Search 4-way associative IP tracker table
-    int hit_way = -1;
-    for (int w = 0; w < IP_WAY_COUNT; w++) {
-        if (ip_table[set][w].valid && ip_table[set][w].tag == tag) {
-            hit_way = w;
-            break;
-        }
+    // Picking the degree from the accuracy of the last 128 prefetch outcomes
+    uint64_t useful  = pf_useful  - last_useful;
+    uint64_t useless = pf_useless - last_useless;
+    if (useful + useless >= 128) {
+        int acc = (int)(useful * 100 / (useful + useless));
+        if (acc < 42)      degree = 1;
+        else if (acc < 50) degree = 2;
+        else if (acc < 65) degree = 4;
+        else if (acc < 80) degree = 6;
+        else               degree = 8;
+        last_useful  = pf_useful;
+        last_useless = pf_useless;
     }
 
-    // IP Table Miss: Allocate entry in 4-way set using LRU
-    if (hit_way == -1) {
-        int victim = 0;
-        for (int w = 0; w < IP_WAY_COUNT; w++) {
-            if (!ip_table[set][w].valid) { victim = w; break; }
-            if (ip_table[set][w].lru == (IP_WAY_COUNT - 1)) victim = w;
+    uint64_t cl     = addr >> LOG2_BLOCK_SIZE;
+    uint64_t page   = addr >> LOG2_PAGE_SIZE;
+    int      offset = (int)(cl & 63);                   
+    uint32_t set    = (uint32_t)((ip ^ (ip >> 5) ^ (ip >> 11) ^ (ip >> 17)) & (IP_SETS - 1));
+    uint16_t tag    = (uint16_t)((ip >> 8) & 0xFFFF);
+
+    // Look for this IP in its set
+    int way = -1;
+    for (int w = 0; w < IP_WAYS; w++)
+        if (ip_table[set][w].valid && ip_table[set][w].tag == tag) { way = w; break; }
+
+    if (way == -1) {
+        // new IP so use a free way, otherwise the least recently used one
+        way = 0;
+        for (int w = 0; w < IP_WAYS; w++) {
+            if (!ip_table[set][w].valid) { way = w; break; }
+            if (ip_table[set][w].lru == IP_WAYS - 1) way = w;
         }
-        ip_table[set][victim].valid = 1;
-        ip_table[set][victim].tag = tag;
-        ip_table[set][victim].last_cl = cl;
-        ip_table[set][victim].last_stride = 0;
-        ip_table[set][victim].u_conf = 0;
-        ip_table[set][victim].sig = (uint16_t)(ip & PHT_MASK);
-        ip_table[set][victim].pf_off = 0;
-        ip_table[set][victim].pf_valid = 0;
-        for (int w = 0; w < IP_WAY_COUNT; w++) {
-            if (ip_table[set][w].lru < ip_table[set][victim].lru) ip_table[set][w].lru++;
-        }
-        ip_table[set][victim].lru = 0;
+        IP_ENTRY &n = ip_table[set][way];
+        n.valid = 1;  n.tag = tag;  n.last_cl = cl;
+        n.last_stride = 0;  n.u_conf = 0;  n.sig = 0;  n.pf_off = 0;  n.pf_valid = 0;
+        make_mru(set, way);
         return;
     }
+    make_mru(set, way);
+    IP_ENTRY &e = ip_table[set][way];
 
-    // IP Table Hit: Update LRU position
-    IP_ENTRY &entry = ip_table[set][hit_way];
-    for (int w = 0; w < IP_WAY_COUNT; w++) {
-        if (ip_table[set][w].lru < entry.lru) ip_table[set][w].lru++;
-    }
-    entry.lru = 0;
-
-    uint64_t last_page = (entry.last_cl >> 6);
-    int8_t stride = 0;
-
-    // Cross-Page Boundary Detection
-    if (cur_page != last_page) {
-        entry.last_cl = cl;
-        entry.pf_valid = 0; // invalidate pf_off on new page
-
-        // Cross-Page Stride Inheritance:
-        // If confident in uniform stride (u_conf >= 2), reuse last_stride to sustain prefetching!
-        if (entry.u_conf >= 2 && entry.last_stride != 0) {
-            stride = entry.last_stride;
-        } else {
-            return;
-        }
+    if (page != (e.last_cl >> 6)) {
+        // new page so keep using the old stride, but only if we were confident in it
+        e.last_cl  = cl;
+        e.pf_valid = 0;
+        if (e.u_conf < 2) return;
     } else {
-        // Same 4KB Page Access
-        int64_t stride_64 = (int64_t)cl - (int64_t)entry.last_cl;
-        if (stride_64 == 0) return; // Same cache line
-        if (stride_64 > 63 || stride_64 < -63) {
-            entry.last_cl = cl;
-            entry.u_conf = 0;
-            entry.last_stride = 0;
-            entry.pf_valid = 0;
-            return;
-        }
-        stride = (int8_t)stride_64;
+        int stride = offset - (int)(e.last_cl & 63);
+        if (stride == 0) return;                        // same cache line
 
-        // 1. Train Uniform Stride Confidence
-        if (stride == entry.last_stride) {
-            if (entry.u_conf < 3) entry.u_conf++;
+        // uniform stride so a mismatch drops confidence to 0 so the IP falls back to the PHT
+        if (stride == e.last_stride) {
+            if (e.u_conf < 3) e.u_conf++;
         } else {
-            // Punitive reset: immediately allow non-uniform PHT fallback on pattern break
-            entry.u_conf = 0;
-            entry.pf_valid = 0;
-        }
-        if (entry.u_conf == 0) {
-            entry.last_stride = stride;
+            e.u_conf = 0;
+            e.pf_valid = 0;
+            e.last_stride = stride;
         }
 
-        // 2. Train Non-Uniform Pattern Table (PHT)
-        uint16_t prev_sig = entry.sig;
-        if (pht[prev_sig].stride == stride) {
-            if (pht[prev_sig].conf < 3) pht[prev_sig].conf++;
+        // train the PHT: old signature -> this stride
+        PHT_ENTRY &p = pht[e.sig];
+        if (p.stride == stride) {
+            if (p.conf < 3) p.conf++;
         } else {
-            if (pht[prev_sig].conf > 0) pht[prev_sig].conf--;
-            if (pht[prev_sig].conf == 0) pht[prev_sig].stride = stride;
+            if (p.conf > 0) p.conf--;
+            if (p.conf == 0) p.stride = stride;
         }
 
-        entry.sig = update_sig(prev_sig, stride);
-        entry.last_cl = cl;
+        e.sig = update_sig(e.sig, stride);
+        e.last_cl = cl;
     }
 
-    uint64_t page_base = cur_page << 6;
+    // Prefetch loop. Uniform mode uses line + stride * d, otherwise we follow
+    // the PHT one predicted stride after another.
+    uint64_t page_base = page << 6;
+    bool uniform = (e.u_conf >= 1);
+    int cur = offset;           // position of the last predicted line (PHT mode)
+    int s = e.sig;              // signature we walk forward (PHT mode)
 
-    // Helper Lambda: Issue prefetch request if inside same 4KB page and not recently requested
-    auto issue = [&](uint64_t target_cl) -> bool {
-        uint64_t pf_addr = target_cl << LOG2_BLOCK_SIZE;
-        if ((pf_addr >> LOG2_PAGE_SIZE) != cur_page) return false;
+    for (int d = 1; d <= degree; d++) {
+        int nxt;
 
-        // Check recent request filter (32-entry circular FIFO)
-        for (int i = 0; i < FILTER_SIZE; i++) {
-            if (filter[i] == target_cl) return true;
-        }
-        filter[filter_head] = target_cl;
-        filter_head = (filter_head + 1) % FILTER_SIZE;
-
-        int fill = (MSHR.occupancy < 12) ? FILL_L1 : FILL_L2;
-        prefetch_line(ip, addr, pf_addr, fill, 0);
-        return true;
-    };
-
-    // 3. Dual Pattern Decision
-    if (entry.u_conf >= 1 && entry.last_stride != 0) {
-        // Uniform Stride Mode with Farthest-Line Tracking (pf_off)
-        for (uint32_t d = 1; d <= current_degree; d++) {
-            int nxt = offset + (int)entry.last_stride * (int)d;
-            if (nxt < 0 || nxt > 63) break;
-
-            // In-stream redundancy suppression: skip lines already prefetched in this page
-            if (entry.pf_valid &&
-                ((entry.last_stride > 0 && nxt <= (int)entry.pf_off) ||
-                 (entry.last_stride < 0 && nxt >= (int)entry.pf_off)))
-                continue;
-
-            uint64_t pf_cl = page_base + (uint64_t)nxt;
-            if (!issue(pf_cl)) break;
-
-            entry.pf_off = (uint8_t)nxt;
-            entry.pf_valid = 1;
-            total_uniform_pf++;
-        }
-    } else if (pht[entry.sig].conf > 0 && pht[entry.sig].stride != 0) {
-        // Non-Uniform Stride Mode: Multi-Degree Lookahead Walk along learned stride graph
-        uint16_t s = entry.sig;
-        uint64_t curr_cl = cl;
-        for (uint32_t d = 1; d <= current_degree; d++) {
-            if (pht[s].conf == 0 || pht[s].stride == 0) break;
-            int8_t pred = pht[s].stride;
-            curr_cl += pred;
-            if (!issue(curr_cl)) break;
-            total_pattern_pf++;
+        if (uniform) {
+            nxt = offset + e.last_stride * d;
+        } else {
+            if (pht[s].conf == 0) break;
+            int pred = pht[s].stride;
+            nxt = cur + pred;
+            cur = nxt;
             s = update_sig(s, pred);
+        }
+
+        // stop if we leave the 4KB page
+        if (nxt < 0 || nxt > 63) break;
+
+        // skip lines already prefetched in this page
+        if (uniform && e.pf_valid && ((e.last_stride > 0 && nxt <= e.pf_off) ||
+                                      (e.last_stride < 0 && nxt >= e.pf_off)))
+            continue;
+
+        uint64_t target = page_base + nxt;
+
+        // checking was this line asked for recently
+        bool recent = false;
+        for (int i = 0; i < FILTER_SIZE; i++)
+            if (filter[i] == target) recent = true;
+
+        if (!recent) {
+            // If the MSHR is more than half full, fill into L2 so L1D demand misses are not blocked
+            int fill = (MSHR.occupancy * 2 < MSHR.SIZE) ? FILL_L1 : FILL_L2;
+            if (!prefetch_line(ip, addr, target << LOG2_BLOCK_SIZE, fill, 0)) break;   // queue full
+
+            filter[filter_head] = target;
+            filter_head = (filter_head + 1) % FILTER_SIZE;
+        }
+
+        if (uniform) {
+            e.pf_off = (uint8_t)nxt;
+            e.pf_valid = 1;
         }
     }
 }
@@ -298,8 +212,5 @@ void CACHE::l1d_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache_hit
 void CACHE::l1d_prefetcher_cache_fill(uint64_t v_addr, uint64_t addr, uint32_t set, uint32_t way, uint8_t prefetch, uint64_t v_evicted_addr, uint64_t evicted_addr, uint32_t metadata_in) {}
 
 void CACHE::l1d_prefetcher_final_stats() {
-    std::cout << "--- SPP Final Statistics [Hybrid Enhanced] ---" << std::endl;
-    std::cout << "Final Dynamic Degree : " << current_degree << std::endl;
-    std::cout << "Uniform Prefetches   : " << total_uniform_pf << std::endl;
-    std::cout << "Pattern Prefetches   : " << total_pattern_pf << std::endl;
+    std::cout << "SPP final degree: " << degree << std::endl;
 }

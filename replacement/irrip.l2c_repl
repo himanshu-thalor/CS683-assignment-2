@@ -2,7 +2,7 @@
 
 #define maxRRPV 3
 uint32_t l2_rrpv[L2C_SET][L2C_WAY];
-uint8_t l2_is_instruction[L2C_SET][L2C_WAY];
+uint8_t l2_is_instruction[L2C_SET][L2C_WAY]; // 1 if the block is an instruction, 0 for data
 
 
 // initialize replacement state
@@ -21,24 +21,31 @@ void CACHE::l2c_initialize_replacement()
 // find replacement victim
 uint32_t CACHE::l2c_find_victim(uint32_t cpu, uint64_t instr_id, uint32_t set, const BLOCK *current_set, uint64_t ip, uint64_t full_addr, uint32_t type)
 {
-    // look for the maxRRPV line
-        for (int i = 0; i < L2C_WAY; i++) {
+    // look for an invalid line first
+    for (int i = 0; i < L2C_WAY; i++) {
         if (current_set[i].valid == 0)
             return i;
     }
 
     while (1)
     {
-    for (int i = 0; i < L2C_WAY; i++)
-            if (l2_rrpv[set][i] == maxRRPV &&!l2_is_instruction[set][i])
-                    return i;
-    for (int i = 0; i < L2C_WAY; i++)
-            if (l2_rrpv[set][i] == (maxRRPV - 1) && !l2_is_instruction[set][i])
-                    return i;
-    for (int i = 0; i < L2C_WAY; i++)
-        if (l2_rrpv[set][i] == maxRRPV)
+        // 1. prefer evicting data at maxRRPV so we keep instructions
+        for (int i = 0; i < L2C_WAY; i++)
+            if (l2_rrpv[set][i] == maxRRPV && !l2_is_instruction[set][i])
                 return i;
-    for (int i=0; i<L2C_WAY; i++)
+
+        // 2. next prefer evicting data at RRPV=2 before touching any instructions
+        for (int i = 0; i < L2C_WAY; i++)
+            if (l2_rrpv[set][i] == (maxRRPV - 1) && !l2_is_instruction[set][i])
+                return i;
+
+        // 3. fallback: evict whatever is at maxRRPV
+        for (int i = 0; i < L2C_WAY; i++)
+            if (l2_rrpv[set][i] == maxRRPV)
+                return i;
+
+        // age all lines if no victim was found yet
+        for (int i=0; i<L2C_WAY; i++)
             l2_rrpv[set][i]++;
     }
 
@@ -82,6 +89,7 @@ void CACHE::l2c_update_replacement_state(uint32_t cpu, uint32_t set, uint32_t wa
     
     if (hit)
     {
+        // instructions get top priority (0), data gets intermediate priority (1)
         if (isInstruction)
             l2_rrpv[set][way] = 0;
         else
@@ -89,13 +97,14 @@ void CACHE::l2c_update_replacement_state(uint32_t cpu, uint32_t set, uint32_t wa
     }
     else
     {
+        // instructions insert near-immediate (1), data inserts distant (2)
         if (isInstruction)
             l2_rrpv[set][way] = 1;      
         else
             l2_rrpv[set][way] = maxRRPV - 1;  
     }
 
-    l2_is_instruction[set][way] = isInstruction;
+    l2_is_instruction[set][way] = isInstruction; // remember block type for eviction
 }
 
 // use this function to print out your own stats at the end of simulation
